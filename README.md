@@ -1,27 +1,20 @@
-# Google Analytics MCP Server (Experimental)
+# Google Analytics MCP Server — HTTP dual-transport edition
 
-[![PyPI version](https://img.shields.io/pypi/v/analytics-mcp.svg)](https://pypi.org/project/analytics-mcp/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![GitHub branch check runs](https://img.shields.io/github/check-runs/googleanalytics/google-analytics-mcp/main)](https://github.com/googleanalytics/google-analytics-mcp/actions?query=branch%3Amain++)
-[![PyPI - Downloads](https://img.shields.io/pypi/dm/analytics-mcp)](https://pypi.org/project/analytics-mcp/)
-[![GitHub stars](https://img.shields.io/github/stars/googleanalytics/google-analytics-mcp?style=social)](https://github.com/googleanalytics/google-analytics-mcp/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/googleanalytics/google-analytics-mcp?style=social)](https://github.com/googleanalytics/google-analytics-mcp/network/members)
-[![YouTube Video Views](https://img.shields.io/youtube/views/PT4wGPxWiRQ)](https://www.youtube.com/watch?v=PT4wGPxWiRQ)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ed.svg)](https://docker.com)
 
-This repo contains the source code for running a local
+HTTP-ready fork of [google-analytics-mcp](https://github.com/googleanalytics/google-analytics-mcp) with **dual SSE + Streamable HTTP transport**, OpenAI-compatible tool schemas, and API key authentication. Works out of the box with **ChatGPT Desktop** (SSE) and **Open Web UI** (Streamable HTTP).
+
+This repo contains the source code for running a containerized
 [MCP](https://modelcontextprotocol.io) server that interacts with APIs for
 [Google Analytics](https://support.google.com/analytics).
-
-Join the discussion and ask questions in the
-[🤖-analytics-mcp channel](https://discord.com/channels/971845904002871346/1398002598665257060)
-on Discord.
 
 ## Tools 🛠️
 
 The server uses the
 [Google Analytics Admin API](https://developers.google.com/analytics/devguides/config/admin/v1)
 and
-[Google Analytics Data API](https://developers.google.com/analytics/devguides/reporting/data/v1)
+[Google Analytics Data API](https://developers.google.com/analytics/reporting/data/v1)
 to provide several
 [Tools](https://modelcontextprotocol.io/docs/concepts/tools) for use with LLMs.
 
@@ -37,6 +30,7 @@ to provide several
 
 - `run_report`: Runs a Google Analytics report using the Data API.
 - `run_funnel_report`: Runs a Google Analytics funnel report using the Data API.
+- `run_conversions_report`: Runs a Google Analytics conversions / attribution report.
 - `get_custom_dimensions_and_metrics`: Retrieves the custom dimensions and
   metrics for a specific property.
 
@@ -45,145 +39,105 @@ to provide several
 - `run_realtime_report`: Runs a Google Analytics realtime report using the
   Data API.
 
-## Setup instructions 🔧
+## Quick start (Docker) 🐳
 
-✨ Watch the [Google Analytics MCP Setup
-Tutorial](https://youtu.be/nS8HLdwmVlY) on YouTube for a step-by-step
-walkthrough of these instructions.
+### Prerequisites
 
-[![Watch the video](https://img.youtube.com/vi/nS8HLdwmVlY/mqdefault.jpg)](https://www.youtube.com/watch?v=nS8HLdwmVlY)
+- Docker and docker-compose
+- A Google Cloud project with the [Analytics Admin API](https://console.cloud.google.com/apis/library/analyticsadmin.googleapis.com) and [Analytics Data API](https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com) enabled
+- OAuth 2.0 credentials (Desktop client) for a Google account with access to your GA4 properties
+- An ADC (Application Default Credentials) JSON file with the `analytics.readonly` scope
 
-Setup involves the following steps:
+### Setup
 
-1.  Configure Python.
-1.  Configure credentials for Google Analytics.
-1.  Configure Gemini.
+1. **Clone the repo**
 
-### Configure Python 🐍
+   ```shell
+   git clone https://github.com/broobe/google-analytics-mcp.git
+   cd google-analytics-mcp
+   ```
 
-[Install pipx](https://pipx.pypa.io/stable/#install-pipx).
+2. **Configure OAuth credentials**
 
-### Enable APIs in your project ✅
+   Generate your ADC file (you only need to do this once):
 
-[Follow the instructions](https://support.google.com/googleapi/answer/6158841)
-to enable the following APIs in your Google Cloud project:
+   ```shell
+   gcloud auth application-default login \
+     --scopes https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/cloud-platform \
+     --client-id-file=YOUR_CLIENT_JSON_FILE
+   ```
 
-- [Google Analytics Admin API](https://console.cloud.google.com/apis/library/analyticsadmin.googleapis.com)
-- [Google Analytics Data API](https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com)
+   Copy the generated credentials file into the project:
 
-### Configure credentials 🔑
+   ```shell
+   cp PATH_TO_CREDENTIALS_JSON credentials.json
+   ```
 
-Configure your [Application Default Credentials
-(ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc).
-Make sure the credentials are for a user with access to your Google Analytics
-accounts or properties.
+3. **Configure environment**
 
-Credentials must include the Google Analytics read-only scope:
+   ```shell
+   cp .env.example .env
+   ```
 
-```
-https://www.googleapis.com/auth/analytics.readonly
-```
+   Edit `.env` and set:
 
-Check out
-[Manage OAuth Clients](https://support.google.com/cloud/answer/15549257)
-for how to create an OAuth client.
+   - `GOOGLE_CLOUD_PROJECT` — your Google Cloud project ID
+   - `GOOGLE_APPLICATION_CREDENTIALS` — path to your ADC JSON file
+   - `MCP_API_KEY` — a secure API key of your choice (used for bearer auth)
 
-Here are some sample `gcloud` commands you might find useful:
+4. **Build and run**
 
-- Set up ADC using user credentials and an OAuth desktop or web client after
-  downloading the client JSON to `YOUR_CLIENT_JSON_FILE`.
+   ```shell
+   docker compose up -d ga4-mcp-http
+   ```
 
-  ```shell
-  gcloud auth application-default login \
-    --scopes https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/cloud-platform \
-    --client-id-file=YOUR_CLIENT_JSON_FILE
-  ```
+   The server listens on port **8080** inside the container. Map it to any host port (default in docker-compose.yml: `8081:8080`).
 
-- Set up ADC using service account impersonation.
+### Client configuration
 
-  ```shell
-  gcloud auth application-default login \
-    --impersonate-service-account=SERVICE_ACCOUNT_EMAIL \
-    --scopes=https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/cloud-platform
-  ```
+#### ChatGPT Desktop (SSE)
 
-When the `gcloud auth application-default` command completes, copy the
-`PATH_TO_CREDENTIALS_JSON` file location printed to the console in the
-following message. You'll need this for the next step!
+Configure your MCP client with:
 
-```
-Credentials saved to file: [PATH_TO_CREDENTIALS_JSON]
-```
+- **URL**: `http://your-host:8081/`
+- **Transport**: SSE (GET `/`)
+- **Auth**: `Authorization: Bearer YOUR_MCP_API_KEY`
 
-### Configure Gemini
+The server returns an SSE endpoint event, and the client POSTs JSON-RPC messages back.
 
-1.  Install [Gemini
-    CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/get-started/installation.md)
-    or [Gemini Code
-    Assist](https://marketplace.visualstudio.com/items?itemName=Google.geminicodeassist).
+#### Open Web UI (Streamable HTTP)
 
-1.  Create or edit the file at `~/.gemini/settings.json`, adding your server
-    to the `mcpServers` list.
+Configure your MCP connection with:
 
-    Replace `PATH_TO_CREDENTIALS_JSON` with the path you copied in the previous
-    step.
+- **URL**: `http://your-host:8081/`
+- **Transport**: Streamable HTTP (POST `/`)
+- **Auth**: `Authorization: Bearer YOUR_MCP_API_KEY`
 
-    We also recommend that you add a `GOOGLE_CLOUD_PROJECT` attribute to the
-    `env` object. Replace `YOUR_PROJECT_ID` in the following example with the
-    [project ID](https://support.google.com/googleapi/answer/7014113) of your
-    Google Cloud project.
+The client sends `initialize` → `notifications/initialized` → `tools/list` (server returns all 9 tools).
 
-    ```json
-    {
-      "mcpServers": {
-        "analytics-mcp": {
-          "command": "pipx",
-          "args": ["run", "analytics-mcp"],
-          "env": {
-            "GOOGLE_APPLICATION_CREDENTIALS": "PATH_TO_CREDENTIALS_JSON",
-            "GOOGLE_PROJECT_ID": "YOUR_PROJECT_ID"
-          }
-        }
-      }
-    }
-    ```
+## API reference
 
-## Try it out 🥼
+### GET /
 
-Launch Gemini Code Assist or Gemini CLI and type `/mcp`. You should see
-`analytics-mcp` listed in the results.
+Returns SSE stream if `Accept: text/event-stream` header is present. Otherwise returns a simple status message.
 
-Here are some sample prompts to get you started:
+### POST /
 
-- Ask what the server can do:
+All JSON-RPC method calls. Requires `Authorization: Bearer <MCP_API_KEY>`.
 
-  ```
-  what can the analytics-mcp server do?
-  ```
+If the query contains `session_id` (e.g., `/messages/?session_id=xxx`), the POST is routed to the SSE transport's message handler. Otherwise it goes to the Streamable HTTP transport.
 
-- Ask about a Google Analytics property
+### Streamable HTTP vs SSE
 
-  ```
-  Give me details about my Google Analytics property with 'xyz' in the name
-  ```
+| Feature | Streamable HTTP | SSE |
+|---------|----------------|-----|
+| Transport | POST request/response | SSE stream (GET) + POST messages |
+| Client example | Open Web UI, custom MCP clients | ChatGPT Desktop |
+| Session lifecycle | Per-request | Long-lived connection |
 
-- Prompt for analysis:
+## Advanced usage
 
-  ```
-  what are the most popular events in my Google Analytics property in the last 180 days?
-  ```
-
-- Ask about signed-in users:
-
-  ```
-  were most of my users in the last 6 months logged in?
-  ```
-
-- Ask about property configuration:
-
-  ```
-  what are the custom dimensions and custom metrics in my property?
-  ```
+For detailed report examples and a full dimension/metric reference, see [GA4-MCP-PROMPT.md](./GA4-MCP-PROMPT.md).
 
 ## Contributing ✨
 
