@@ -93,21 +93,12 @@ mcp_tools = [adk_to_mcp_tool_type(tool) for tool in tools]
 
 
 def sanitize_mcp_schema_properties(node: dict) -> None:
-    """Ensure additionalProperties is a boolean value to satisfy certain MCP clients.
-
-    This addresses issues with clients like Claude Desktop that fail when
-    additionalProperties is a schema object instead of a boolean.
-    """
+    """Remove additionalProperties from schemas for OpenAI compatibility."""
     if not isinstance(node, dict):
         return
 
-    # Check and update the current node
-    if "additionalProperties" in node:
-        val = node["additionalProperties"]
-        if not isinstance(val, bool):
-            node["additionalProperties"] = True
+    node.pop("additionalProperties", None)
 
-    # Traverse children
     for key, child in node.items():
         if isinstance(child, dict):
             sanitize_mcp_schema_properties(child)
@@ -124,12 +115,15 @@ for tool in mcp_tools:
     # Check if inputSchema is empty
     if tool.inputSchema == {}:
         tool.inputSchema = {"type": "object", "properties": {}}
-    # Fix union type hints generating spurious "type": "null"
     for prop in tool.inputSchema.get("properties", {}).values():
+        # Fix union type hints generating spurious "type": "null"
         if "anyOf" in prop and prop.get("type") == "null":
             del prop["type"]
+        # Simplify anyOf to a single string type for OpenAI compatibility
+        if "anyOf" in prop:
+            prop.clear()
+            prop["type"] = "string"
 
-    # Ensure additionalProperties is compatible with all MCP clients
     sanitize_mcp_schema_properties(tool.inputSchema)
 
     # Explicitly mark required fields for reporting tools to guide the LLM

@@ -67,3 +67,11 @@ pylintrc
 pylintrc.test
 
 .agents/skills
+
+# Environment variables and secrets
+.env
+credentials.json
+client_desktop.json
+client_oauth.json
+
+# Docker
