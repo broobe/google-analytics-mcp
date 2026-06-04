@@ -59,19 +59,19 @@ async def app(scope, receive, send):
         await response(scope, receive, send)
         return
 
-    # POST - Auth check
+    # POST - Route SSE messages first (no auth required)
+    query = request.url.query
+    if "session_id" in query or "/messages" in request.url.path:
+        await sse_transport.handle_post_message(scope, receive, send)
+        return
+
+    # Auth check for non-SSE POST (Streamable HTTP)
     if API_KEY:
         auth = request.headers.get("Authorization", "")
         if auth != f"Bearer {API_KEY}":
             response = JSONResponse({"error": "Unauthorized"}, status_code=401)
             await response(scope, receive, send)
             return
-
-    # Route POST messages to SSE handler if they have session_id
-    query = request.url.query
-    if "session_id" in query or "/messages" in request.url.path:
-        await sse_transport.handle_post_message(scope, receive, send)
-        return
 
     # Default: Streamable HTTP
     await streamable_transport.handle_request(scope, receive, send)
